@@ -9,7 +9,6 @@ use crate::options::{
 
 #[derive(Clone)]
 pub struct Config {
-    pub name: String,
     pub home_path: PathBuf,
 
     // Folders and wallpapers
@@ -59,8 +58,10 @@ pub struct Config {
 
     // Paths
     pub cache_dir: PathBuf,
+    #[allow(dead_code)]
     pub config_dir: PathBuf,
     pub config_file: PathBuf,
+    #[allow(dead_code)]
     pub state_dir: PathBuf,
     pub state_file: PathBuf,
 }
@@ -90,7 +91,6 @@ impl Config {
             .unwrap_or_else(|| home_path.join("Pictures"));
 
         Config {
-            name: "waypaper".to_string(),
             home_path: home_path.clone(),
             image_folder_list: vec![image_folder_fallback],
             wallpapers: vec![],

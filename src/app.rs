@@ -10,7 +10,7 @@ use crate::changer::change_wallpaper;
 use crate::common::{cache_image, get_cached_image_path, get_image_name, get_image_paths, get_random_file};
 use crate::config::Config;
 use crate::options::{
-    BACKEND_OPTIONS, FILL_OPTIONS, SORT_DISPLAYS, SORT_OPTIONS, SWWW_TRANSITION_TYPES,
+    FILL_OPTIONS, SORT_DISPLAYS, SWWW_TRANSITION_TYPES,
     get_monitor_options,
 };
 
@@ -67,7 +67,7 @@ impl WaypaperApp {
         let swww_duration_str = cf.swww_transition_duration.to_string();
         let swww_fps_str = cf.swww_transition_fps.to_string();
 
-        let mut app = WaypaperApp {
+        let app = WaypaperApp {
             cf,
             search_query: String::new(),
             selected_index: 0,
@@ -188,7 +188,7 @@ impl WaypaperApp {
 
     fn set_wallpaper(&mut self, path: &PathBuf) {
         let path = path.clone();
-        let mut cf = self.cf.clone();
+        let cf = self.cf.clone();
         self.cf.selected_wallpaper = Some(path.clone());
         self.cf.attribute_selected_wallpaper();
         self.cf.save();
