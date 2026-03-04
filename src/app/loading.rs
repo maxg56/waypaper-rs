@@ -19,7 +19,7 @@ impl WaypaperApp {
         let sort = self.cf.sort_option.clone();
 
         {
-            let mut s = state.lock().unwrap();
+            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
             s.loading = true;
             s.image_paths.clear();
             s.image_names.clear();
@@ -75,7 +75,7 @@ impl WaypaperApp {
                 .map(|p| get_image_name(p, &folder_list, show_path))
                 .collect();
 
-            let mut s = state.lock().unwrap();
+            let mut s = state.lock().unwrap_or_else(|e| e.into_inner());
             s.image_paths = paths;
             s.image_names = names;
             s.loading = false;

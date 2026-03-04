@@ -91,7 +91,7 @@ impl WaypaperApp {
             if !i.key_pressed(egui::Key::Enter) {
                 return None;
             }
-            let state = self.load_state.lock().unwrap();
+            let state = self.load_state.lock().unwrap_or_else(|e| e.into_inner());
             let q = self.search_query.to_lowercase();
             let visible: Vec<usize> = state
                 .image_names
