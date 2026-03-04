@@ -5,6 +5,13 @@ use std::fs;
 
 use crate::options::get_valid_extensions;
 
+/// Strategy for subfolder traversal
+enum TraversalMode {
+    DirectOnly,
+    OneLevel,
+    Recursive,
+}
+
 /// Collect all image (and optionally video) paths from the given folders
 pub fn get_image_paths(
     backend: &str,
@@ -15,38 +22,61 @@ pub fn get_image_paths(
     show_gifs_only: bool,
 ) -> Vec<PathBuf> {
     let valid_exts = get_valid_extensions(backend);
+    let mode = match (include_all_subfolders, include_subfolders) {
+        (true, _) => TraversalMode::Recursive,
+        (_, true) => TraversalMode::OneLevel,
+        _ => TraversalMode::DirectOnly,
+    };
+
     let mut paths = Vec::new();
+    for folder in folders.iter().filter(|f| f.is_dir()) {
+        collect_from_folder(folder, &valid_exts, show_hidden, show_gifs_only, &mode, &mut paths);
+    }
+    paths
+}
 
-    for folder in folders {
-        if !folder.is_dir() {
-            continue;
+/// Collect images from a single folder using the specified traversal mode
+fn collect_from_folder(
+    folder: &Path,
+    valid_exts: &[&str],
+    show_hidden: bool,
+    show_gifs_only: bool,
+    mode: &TraversalMode,
+    out: &mut Vec<PathBuf>,
+) {
+    match mode {
+        TraversalMode::Recursive => {
+            collect_recursive(folder, valid_exts, show_hidden, show_gifs_only, out);
         }
-
-        if include_all_subfolders {
-            // Recursive walk
-            collect_recursive(folder, &valid_exts, show_hidden, show_gifs_only, &mut paths);
-        } else if include_subfolders {
-            // One level of subfolders
-            if let Ok(entries) = fs::read_dir(folder) {
-                for entry in entries.flatten() {
-                    let p = entry.path();
-                    if is_hidden(&p) && !show_hidden {
-                        continue;
-                    }
-                    if p.is_dir() {
-                        collect_direct(&p, &valid_exts, show_hidden, show_gifs_only, &mut paths);
-                    } else if is_valid_image(&p, &valid_exts, show_gifs_only) {
-                        paths.push(p);
-                    }
-                }
-            }
-        } else {
-            // Direct children only
-            collect_direct(folder, &valid_exts, show_hidden, show_gifs_only, &mut paths);
+        TraversalMode::OneLevel => {
+            collect_one_level(folder, valid_exts, show_hidden, show_gifs_only, out);
+        }
+        TraversalMode::DirectOnly => {
+            collect_direct(folder, valid_exts, show_hidden, show_gifs_only, out);
         }
     }
+}
 
-    paths
+/// One level of subfolders: direct children + immediate subdirectories
+fn collect_one_level(
+    dir: &Path,
+    valid_exts: &[&str],
+    show_hidden: bool,
+    show_gifs_only: bool,
+    out: &mut Vec<PathBuf>,
+) {
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let p = entry.path();
+        if is_hidden(&p) && !show_hidden {
+            continue;
+        }
+        if p.is_dir() {
+            collect_direct(&p, valid_exts, show_hidden, show_gifs_only, out);
+        } else if is_valid_image(&p, valid_exts, show_gifs_only) {
+            out.push(p);
+        }
+    }
 }
 
 fn collect_direct(

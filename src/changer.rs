@@ -118,45 +118,65 @@ fn change_with_mpvpaper(image_path: &Path, cf: &Config, monitor: &str) {
     }
 }
 
+/// Build swww/awww transition arguments from config
+fn build_transition_args(cf: &Config) -> Vec<String> {
+    vec![
+        "--fill-color".to_string(), cf.color.trim_start_matches('#').to_string(),
+        "--transition-type".to_string(), cf.swww_transition_type.clone(),
+        "--transition-step".to_string(), cf.swww_transition_step.to_string(),
+        "--transition-angle".to_string(), cf.swww_transition_angle.to_string(),
+        "--transition-duration".to_string(), cf.swww_transition_duration.to_string(),
+        "--transition-fps".to_string(), cf.swww_transition_fps.to_string(),
+    ]
+}
+
+/// Resolve fill option to backend-specific resize value
+fn resolve_fill(cf: &Config, fill_map: &[(&str, &str)], default: &str) -> String {
+    fill_map
+        .iter()
+        .find(|(k, _)| *k == cf.fill_option.as_str())
+        .map(|(_, v)| *v)
+        .unwrap_or(default)
+        .to_string()
+}
+
+/// Ensure a daemon process is running, starting it if needed
+fn ensure_daemon_running(daemon: &str, wait_ms: u64) {
+    let running = Command::new("pgrep")
+        .arg(daemon)
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if !running {
+        let _ = Command::new(daemon).spawn();
+        thread::sleep(Duration::from_millis(wait_ms));
+    }
+}
+
+/// Common fill map for swww/awww backends
+const SWWW_FILL_MAP: &[(&str, &str)] = &[
+    ("fill", "crop"),
+    ("fit", "fit"),
+    ("center", "no"),
+    ("stretch", "crop"),
+    ("tile", "no"),
+];
+
 fn change_with_swww(image_path: &Path, cf: &Config, monitor: &str) {
     seek_and_destroy("swaybg", "All");
     seek_and_destroy("hyprpaper", "All");
     seek_and_destroy("awww-daemon", "All");
 
-    let fill_map = [
-        ("fill", "crop"),
-        ("fit", "fit"),
-        ("center", "no"),
-        ("stretch", "crop"),
-        ("tile", "no"),
-    ];
-    let fill = fill_map
-        .iter()
-        .find(|(k, _)| *k == cf.fill_option.as_str())
-        .map(|(_, v)| *v)
-        .unwrap_or("crop");
-
-    // Ensure swww-daemon is running
-    let daemon_running = Command::new("pgrep")
-        .arg("swww-daemon")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-    if !daemon_running {
-        let _ = Command::new("swww-daemon").spawn();
-        thread::sleep(Duration::from_millis(500));
-    }
+    let fill = resolve_fill(cf, SWWW_FILL_MAP, "crop");
+    ensure_daemon_running("swww-daemon", 500);
 
     let mut cmd = Command::new("swww");
     cmd.arg("img");
     cmd.arg(image_path);
-    cmd.args(["--resize", fill]);
-    cmd.args(["--fill-color", cf.color.trim_start_matches('#')]);
-    cmd.args(["--transition-type", &cf.swww_transition_type]);
-    cmd.args(["--transition-step", &cf.swww_transition_step.to_string()]);
-    cmd.args(["--transition-angle", &cf.swww_transition_angle.to_string()]);
-    cmd.args(["--transition-duration", &cf.swww_transition_duration.to_string()]);
-    cmd.args(["--transition-fps", &cf.swww_transition_fps.to_string()]);
+    cmd.args(["--resize", &fill]);
+    for arg in build_transition_args(cf) {
+        cmd.arg(arg);
+    }
     if monitor != "All" {
         cmd.args(["--outputs", monitor]);
     }
@@ -168,39 +188,16 @@ fn change_with_awww(image_path: &Path, cf: &Config, monitor: &str) {
     seek_and_destroy("hyprpaper", "All");
     seek_and_destroy("swww-daemon", "All");
 
-    let fill_map = [
-        ("fill", "crop"),
-        ("fit", "fit"),
-        ("center", "no"),
-        ("stretch", "crop"),
-        ("tile", "no"),
-    ];
-    let fill = fill_map
-        .iter()
-        .find(|(k, _)| *k == cf.fill_option.as_str())
-        .map(|(_, v)| *v)
-        .unwrap_or("crop");
-
-    let daemon_running = Command::new("pgrep")
-        .arg("awww-daemon")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-    if !daemon_running {
-        let _ = Command::new("awww-daemon").spawn();
-        thread::sleep(Duration::from_millis(500));
-    }
+    let fill = resolve_fill(cf, SWWW_FILL_MAP, "crop");
+    ensure_daemon_running("awww-daemon", 500);
 
     let mut cmd = Command::new("awww");
     cmd.arg("img");
     cmd.arg(image_path);
-    cmd.args(["--resize", fill]);
-    cmd.args(["--fill-color", cf.color.trim_start_matches('#')]);
-    cmd.args(["--transition-type", &cf.swww_transition_type]);
-    cmd.args(["--transition-step", &cf.swww_transition_step.to_string()]);
-    cmd.args(["--transition-angle", &cf.swww_transition_angle.to_string()]);
-    cmd.args(["--transition-duration", &cf.swww_transition_duration.to_string()]);
-    cmd.args(["--transition-fps", &cf.swww_transition_fps.to_string()]);
+    cmd.args(["--resize", &fill]);
+    for arg in build_transition_args(cf) {
+        cmd.arg(arg);
+    }
     if monitor != "All" {
         cmd.args(["--outputs", monitor]);
     }
@@ -215,13 +212,9 @@ fn change_with_feh(image_path: &Path, cf: &Config, _monitor: &str) {
         ("stretch", "--bg-scale"),
         ("tile", "--bg-tile"),
     ];
-    let fill = fill_map
-        .iter()
-        .find(|(k, _)| *k == cf.fill_option.as_str())
-        .map(|(_, v)| *v)
-        .unwrap_or("--bg-fill");
+    let fill = resolve_fill(cf, &fill_map, "--bg-fill");
     let _ = Command::new("feh")
-        .args([fill, "--image-bg", &cf.color])
+        .args([&fill, "--image-bg", &cf.color])
         .arg(image_path)
         .spawn();
 }
@@ -234,14 +227,10 @@ fn change_with_xwallpaper(image_path: &Path, cf: &Config, monitor: &str) {
         ("stretch", "--stretch"),
         ("tile", "--tile"),
     ];
-    let fill = fill_map
-        .iter()
-        .find(|(k, _)| *k == cf.fill_option.as_str())
-        .map(|(_, v)| *v)
-        .unwrap_or("--zoom");
+    let fill = resolve_fill(cf, &fill_map, "--zoom");
     let mon = if monitor == "All" { "all" } else { monitor };
     let _ = Command::new("xwallpaper")
-        .args(["--output", mon, fill])
+        .args(["--output", mon, &fill])
         .arg(image_path)
         .spawn();
 }
@@ -254,28 +243,16 @@ fn change_with_wallutils(image_path: &Path, cf: &Config, _monitor: &str) {
         ("stretch", "stretch"),
         ("tile", "tile"),
     ];
-    let fill = fill_map
-        .iter()
-        .find(|(k, _)| *k == cf.fill_option.as_str())
-        .map(|(_, v)| *v)
-        .unwrap_or("scale");
+    let fill = resolve_fill(cf, &fill_map, "scale");
     let _ = Command::new("setwallpaper")
-        .args(["--mode", fill])
+        .args(["--mode", &fill])
         .arg(image_path)
         .spawn();
 }
 
 fn change_with_hyprpaper(image_path: &Path, _cf: &Config, monitor: &str) {
     // Ensure hyprpaper is running
-    let running = Command::new("pgrep")
-        .arg("hyprpaper")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-    if !running {
-        let _ = Command::new("hyprpaper").spawn();
-        thread::sleep(Duration::from_secs(1));
-    }
+    ensure_daemon_running("hyprpaper", 1000);
 
     // Determine affected monitors
     let monitors: Vec<String> = if monitor == "All" {
@@ -315,7 +292,19 @@ fn change_with_hyprpaper(image_path: &Path, _cf: &Config, monitor: &str) {
 pub fn change_wallpaper(image_path: &Path, cf: &Config, monitor: &str) {
     println!("Setting wallpaper: {} on {monitor} via {}", image_path.display(), cf.backend);
 
-    let result = match cf.backend.as_str() {
+    let result = dispatch_backend(image_path, cf, monitor);
+
+    if result.is_ok() && cf.backend != "none" {
+        let filename = image_path.file_name().unwrap_or_default().to_string_lossy();
+        println!("Set {filename} on {monitor} via {}", cf.backend);
+    }
+
+    run_post_command(image_path, cf, monitor);
+}
+
+/// Dispatch to the correct backend implementation
+fn dispatch_backend(image_path: &Path, cf: &Config, monitor: &str) -> Result<(), ()> {
+    match cf.backend.as_str() {
         "swaybg" => { change_with_swaybg(image_path, cf, monitor); Ok(()) }
         "mpvpaper" => { change_with_mpvpaper(image_path, cf, monitor); Ok(()) }
         "swww" => { change_with_swww(image_path, cf, monitor); Ok(()) }
@@ -329,20 +318,18 @@ pub fn change_wallpaper(image_path: &Path, cf: &Config, monitor: &str) {
             eprintln!("Unknown backend: {b}");
             Err(())
         }
-    };
-
-    if result.is_ok() && cf.backend != "none" {
-        let filename = image_path.file_name().unwrap_or_default().to_string_lossy();
-        println!("Set {filename} on {monitor} via {}", cf.backend);
     }
+}
 
-    // Run post-command if configured
-    if !cf.post_command.is_empty() && cf.use_post_command {
-        let path_escaped = image_path.display().to_string().replace(' ', "\\ ");
-        let cmd = cf.post_command
-            .replace("$wallpaper", &path_escaped)
-            .replace("$monitor", monitor);
-        let _ = Command::new("sh").args(["-c", &cmd]).spawn();
-        println!("Executed post-command: {cmd}");
+/// Execute the user-configured post-command, if any
+fn run_post_command(image_path: &Path, cf: &Config, monitor: &str) {
+    if cf.post_command.is_empty() || !cf.use_post_command {
+        return;
     }
+    let path_escaped = image_path.display().to_string().replace(' ', "\\ ");
+    let cmd = cf.post_command
+        .replace("$wallpaper", &path_escaped)
+        .replace("$monitor", monitor);
+    let _ = Command::new("sh").args(["-c", &cmd]).spawn();
+    println!("Executed post-command: {cmd}");
 }
