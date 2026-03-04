@@ -135,48 +135,56 @@ impl Config {
 
         let get = |key: &str| -> Option<String> { ini.get("settings", key) };
 
+        self.read_string_fields(&get);
+        self.read_numeric_fields(&get);
+        self.read_bool_fields(&get);
+        self.read_list_fields(&get);
+    }
+
+    /// Parse simple string config values
+    fn read_string_fields(&mut self, get: &dyn Fn(&str) -> Option<String>) {
         if let Some(v) = get("fill") { self.fill_option = v; }
         if let Some(v) = get("sort") { self.sort_option = v; }
         if let Some(v) = get("backend") { self.backend = v; }
         if let Some(v) = get("color") { self.color = v; }
         if let Some(v) = get("post_command") { self.post_command = v; }
         if let Some(v) = get("swww_transition_type") { self.swww_transition_type = v; }
+        if let Some(v) = get("mpvpaper_options") { self.mpvpaper_options = v; }
+    }
+
+    /// Parse numeric config values with defaults
+    fn read_numeric_fields(&mut self, get: &dyn Fn(&str) -> Option<String>) {
         if let Some(v) = get("swww_transition_step") { self.swww_transition_step = v.parse().unwrap_or(63); }
         if let Some(v) = get("swww_transition_angle") { self.swww_transition_angle = v.parse().unwrap_or(0); }
         if let Some(v) = get("swww_transition_duration") { self.swww_transition_duration = v.parse().unwrap_or(2.0); }
         if let Some(v) = get("swww_transition_fps") { self.swww_transition_fps = v.parse().unwrap_or(60); }
-        if let Some(v) = get("mpvpaper_sound") { self.mpvpaper_sound = v.to_lowercase() == "true"; }
-        if let Some(v) = get("mpvpaper_options") { self.mpvpaper_options = v; }
         if let Some(v) = get("number_of_columns") { self.number_of_columns = v.parse().unwrap_or(3).max(1); }
-        if let Some(v) = get("subfolders") { self.include_subfolders = v.to_lowercase() == "true"; }
-        if let Some(v) = get("all_subfolders") { self.include_all_subfolders = v.to_lowercase() == "true"; }
-        if let Some(v) = get("show_hidden") { self.show_hidden = v.to_lowercase() == "true"; }
-        if let Some(v) = get("show_gifs_only") { self.show_gifs_only = v.to_lowercase() == "true"; }
-        if let Some(v) = get("zen_mode") { self.zen_mode = v.to_lowercase() == "true"; }
-        if let Some(v) = get("use_xdg_state") { self.use_xdg_state = v.to_lowercase() == "true"; }
-        if let Some(v) = get("show_path_in_tooltip") { self.show_path_in_tooltip = v.to_lowercase() == "true"; }
+    }
 
-        // Parse multi-line folder list
+    /// Parse boolean config values (stored as "true"/"false" strings)
+    fn read_bool_fields(&mut self, get: &dyn Fn(&str) -> Option<String>) {
+        let parse_bool = |s: &str| s.to_lowercase() == "true";
+
+        if let Some(v) = get("mpvpaper_sound") { self.mpvpaper_sound = parse_bool(&v); }
+        if let Some(v) = get("subfolders") { self.include_subfolders = parse_bool(&v); }
+        if let Some(v) = get("all_subfolders") { self.include_all_subfolders = parse_bool(&v); }
+        if let Some(v) = get("show_hidden") { self.show_hidden = parse_bool(&v); }
+        if let Some(v) = get("show_gifs_only") { self.show_gifs_only = parse_bool(&v); }
+        if let Some(v) = get("zen_mode") { self.zen_mode = parse_bool(&v); }
+        if let Some(v) = get("use_xdg_state") { self.use_xdg_state = parse_bool(&v); }
+        if let Some(v) = get("show_path_in_tooltip") { self.show_path_in_tooltip = parse_bool(&v); }
+    }
+
+    /// Parse multi-line list fields (folders, monitors, wallpapers)
+    fn read_list_fields(&mut self, get: &dyn Fn(&str) -> Option<String>) {
         if let Some(v) = get("folder") {
-            self.image_folder_list = v
-                .split('\n')
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .map(|s| expand_tilde(s, &self.home_path))
-                .collect();
+            self.image_folder_list = parse_path_list(&v, &self.home_path);
         }
-
-        // Parse monitors and wallpapers
         if let Some(v) = get("monitors") {
-            self.monitors = v.split('\n').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+            self.monitors = parse_string_list(&v);
         }
         if let Some(v) = get("wallpaper") {
-            self.wallpapers = v
-                .split('\n')
-                .map(|s| s.trim())
-                .filter(|s| !s.is_empty())
-                .map(|s| expand_tilde(s, &self.home_path))
-                .collect();
+            self.wallpapers = parse_path_list(&v, &self.home_path);
         }
     }
 
@@ -280,6 +288,25 @@ impl Config {
             self.number_of_columns = 1;
         }
     }
+}
+
+/// Parse a newline-separated list of paths, expanding ~ to home
+fn parse_path_list(value: &str, home: &PathBuf) -> Vec<PathBuf> {
+    value
+        .split('\n')
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| expand_tilde(s, home))
+        .collect()
+}
+
+/// Parse a newline-separated list of strings
+fn parse_string_list(value: &str) -> Vec<String> {
+    value
+        .split('\n')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 fn expand_tilde(path: &str, home: &PathBuf) -> PathBuf {

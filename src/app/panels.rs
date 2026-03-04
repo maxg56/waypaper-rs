@@ -1,4 +1,4 @@
-use egui::Context;
+use egui::{Context, Ui};
 
 use crate::options::{FILL_OPTIONS, SORT_DISPLAYS, SWWW_TRANSITION_TYPES, get_monitor_options};
 
@@ -8,75 +8,90 @@ use super::helpers::{capitalize, color32_to_hex, hex_to_color32};
 impl WaypaperApp {
     pub(crate) fn show_top_panel(&mut self, ctx: &Context) {
         if self.cf.zen_mode {
-            // In zen mode pressing 'z' exits it (handled in handle_global_keys)
             return;
         }
 
         egui::TopBottomPanel::top("top_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if ui.button("📁 Folder").clicked() {
-                    self.want_folder_dialog = true;
-                }
-
-                ui.label("🔍");
-                let resp = ui.text_edit_singleline(&mut self.search_query);
-                if resp.changed() {
-                    self.selected_index = 0;
-                }
-                if ui.button("✕").clicked() {
-                    self.search_query.clear();
-                }
-
+                self.show_folder_button(ui);
+                self.show_search_bar(ui);
                 ui.separator();
-
-                egui::ComboBox::from_id_salt("sort")
-                    .selected_text(
-                        SORT_DISPLAYS
-                            .iter()
-                            .find(|(k, _)| *k == self.cf.sort_option.as_str())
-                            .map(|(_, v)| *v)
-                            .unwrap_or("Sort"),
-                    )
-                    .show_ui(ui, |ui| {
-                        for (key, label) in SORT_DISPLAYS {
-                            if ui
-                                .selectable_label(self.cf.sort_option == *key, *label)
-                                .clicked()
-                            {
-                                self.cf.sort_option = key.to_string();
-                                self.start_loading();
-                            }
-                        }
-                    });
-
-                if ui
-                    .button("⟳ Refresh")
-                    .on_hover_text("Clear cache and reload")
-                    .clicked()
-                {
-                    let _ = std::fs::remove_dir_all(&self.cf.cache_dir);
-                    let _ = std::fs::create_dir_all(&self.cf.cache_dir);
-                    self.textures.clear();
-                    self.start_loading();
-                }
-
-                if ui
-                    .button("🎲 Random")
-                    .on_hover_text("Set a random wallpaper")
-                    .clicked()
-                {
-                    self.set_random_wallpaper();
-                }
-
-                if ui.button("⚙ Options").clicked() {
-                    self.show_options = !self.show_options;
-                }
-
-                if ui.button("✕ Exit").clicked() {
-                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                }
+                self.show_sort_combo(ui);
+                self.show_action_buttons(ui, ctx);
             });
         });
+    }
+
+    /// Folder picker button
+    fn show_folder_button(&mut self, ui: &mut Ui) {
+        if ui.button("📁 Folder").clicked() {
+            self.want_folder_dialog = true;
+        }
+    }
+
+    /// Search input with clear button
+    fn show_search_bar(&mut self, ui: &mut Ui) {
+        ui.label("🔍");
+        let resp = ui.text_edit_singleline(&mut self.search_query);
+        if resp.changed() {
+            self.selected_index = 0;
+        }
+        if ui.button("✕").clicked() {
+            self.search_query.clear();
+        }
+    }
+
+    /// Sort option combo box
+    fn show_sort_combo(&mut self, ui: &mut Ui) {
+        egui::ComboBox::from_id_salt("sort")
+            .selected_text(
+                SORT_DISPLAYS
+                    .iter()
+                    .find(|(k, _)| *k == self.cf.sort_option.as_str())
+                    .map(|(_, v)| *v)
+                    .unwrap_or("Sort"),
+            )
+            .show_ui(ui, |ui| {
+                for (key, label) in SORT_DISPLAYS {
+                    if ui
+                        .selectable_label(self.cf.sort_option == *key, *label)
+                        .clicked()
+                    {
+                        self.cf.sort_option = key.to_string();
+                        self.start_loading();
+                    }
+                }
+            });
+    }
+
+    /// Refresh, Random, Options, Exit buttons
+    fn show_action_buttons(&mut self, ui: &mut Ui, ctx: &Context) {
+        if ui
+            .button("⟳ Refresh")
+            .on_hover_text("Clear cache and reload")
+            .clicked()
+        {
+            let _ = std::fs::remove_dir_all(&self.cf.cache_dir);
+            let _ = std::fs::create_dir_all(&self.cf.cache_dir);
+            self.textures.clear();
+            self.start_loading();
+        }
+
+        if ui
+            .button("🎲 Random")
+            .on_hover_text("Set a random wallpaper")
+            .clicked()
+        {
+            self.set_random_wallpaper();
+        }
+
+        if ui.button("⚙ Options").clicked() {
+            self.show_options = !self.show_options;
+        }
+
+        if ui.button("✕ Exit").clicked() {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
     }
 
     pub(crate) fn show_options_popup(&mut self, ctx: &Context) {
@@ -116,146 +131,12 @@ impl WaypaperApp {
 
         egui::TopBottomPanel::bottom("bottom_bar").show(ctx, |ui| {
             ui.horizontal(|ui| {
-                // Backend selector
-                egui::ComboBox::from_id_salt("backend")
-                    .selected_text(&self.cf.backend)
-                    .show_ui(ui, |ui| {
-                        for b in &self.cf.installed_backends.clone() {
-                            if ui.selectable_label(self.cf.backend == *b, b).clicked() {
-                                self.cf.backend = b.clone();
-                                self.cf.selected_monitor = "All".to_string();
-                                self.monitor_options = get_monitor_options(&self.cf.backend);
-                            }
-                        }
-                    });
-
-                // Monitor selector (not for feh/wallutils/none)
-                if !["feh", "wallutils", "none"].contains(&self.cf.backend.as_str()) {
-                    egui::ComboBox::from_id_salt("monitor")
-                        .selected_text(&self.cf.selected_monitor)
-                        .show_ui(ui, |ui| {
-                            for m in &self.monitor_options.clone() {
-                                if ui
-                                    .selectable_label(self.cf.selected_monitor == *m, m)
-                                    .clicked()
-                                {
-                                    self.cf.selected_monitor = m.clone();
-                                }
-                            }
-                        });
-                }
-
-                // Fill selector (not for hyprpaper/none)
-                if !["hyprpaper", "none"].contains(&self.cf.backend.as_str()) {
-                    egui::ComboBox::from_id_salt("fill")
-                        .selected_text(capitalize(&self.cf.fill_option))
-                        .show_ui(ui, |ui| {
-                            for f in FILL_OPTIONS {
-                                if ui
-                                    .selectable_label(
-                                        self.cf.fill_option == *f,
-                                        capitalize(f),
-                                    )
-                                    .clicked()
-                                {
-                                    self.cf.fill_option = f.to_string();
-                                }
-                            }
-                        });
-
-                    let mut color = hex_to_color32(&self.cf.color);
-                    if ui.color_edit_button_srgba(&mut color).changed() {
-                        self.cf.color = color32_to_hex(color);
-                    }
-                }
-
-                // swww/awww transition options
-                if ["swww", "awww"].contains(&self.cf.backend.as_str()) {
-                    egui::ComboBox::from_id_salt("transition")
-                        .selected_text(&self.cf.swww_transition_type)
-                        .show_ui(ui, |ui| {
-                            for t in SWWW_TRANSITION_TYPES {
-                                if ui
-                                    .selectable_label(self.cf.swww_transition_type == *t, *t)
-                                    .clicked()
-                                {
-                                    self.cf.swww_transition_type = t.to_string();
-                                }
-                            }
-                        });
-
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.swww_angle_str)
-                            .desired_width(40.0)
-                            .hint_text("angle"),
-                    );
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.swww_steps_str)
-                            .desired_width(40.0)
-                            .hint_text("steps"),
-                    );
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.swww_duration_str)
-                            .desired_width(55.0)
-                            .hint_text("duration"),
-                    );
-                    ui.add(
-                        egui::TextEdit::singleline(&mut self.swww_fps_str)
-                            .desired_width(40.0)
-                            .hint_text("fps"),
-                    );
-
-                    if let Ok(v) = self.swww_angle_str.parse::<u32>() {
-                        self.cf.swww_transition_angle = v;
-                    }
-                    if let Ok(v) = self.swww_steps_str.parse::<u32>() {
-                        self.cf.swww_transition_step = v;
-                    }
-                    if let Ok(v) = self.swww_duration_str.parse::<f32>() {
-                        self.cf.swww_transition_duration = v;
-                    }
-                    if let Ok(v) = self.swww_fps_str.parse::<u32>() {
-                        self.cf.swww_transition_fps = v;
-                    }
-                }
-
-                // mpvpaper controls
-                if self.cf.backend == "mpvpaper" {
-                    if ui.button("⏸ Pause").clicked() {
-                        let monitor = self.cf.selected_monitor.clone();
-                        let cmd =
-                            format!("echo 'cycle pause' | socat - /tmp/mpv-socket-{monitor}");
-                        let _ = std::process::Command::new("sh")
-                            .args(["-c", &cmd])
-                            .spawn();
-                    }
-                    if ui.button("⏹ Stop").clicked() {
-                        let _ = std::process::Command::new("killall")
-                            .arg("mpvpaper")
-                            .spawn();
-                    }
-                    if ui
-                        .checkbox(&mut self.cf.mpvpaper_sound, "Sound")
-                        .changed()
-                    {
-                        let monitor = self.cf.selected_monitor.clone();
-                        let cmd =
-                            format!("echo 'cycle mute' | socat - /tmp/mpv-socket-{monitor}");
-                        let _ = std::process::Command::new("sh")
-                            .args(["-c", &cmd])
-                            .spawn();
-                    }
-                }
-
-                ui.separator();
-                ui.label("Cols:");
-                let mut cols = self.cf.number_of_columns as i32;
-                if ui
-                    .add(egui::DragValue::new(&mut cols).range(1..=10))
-                    .changed()
-                {
-                    self.cf.number_of_columns = cols as usize;
-                }
+                self.show_backend_selector(ui);
+                self.show_monitor_selector(ui);
+                self.show_fill_selector(ui);
+                self.show_swww_options(ui);
+                self.show_mpvpaper_controls(ui);
+                self.show_columns_control(ui);
             });
 
             if loading {
@@ -265,6 +146,175 @@ impl WaypaperApp {
                 });
             }
         });
+    }
+
+    /// Backend combo box selector
+    fn show_backend_selector(&mut self, ui: &mut Ui) {
+        egui::ComboBox::from_id_salt("backend")
+            .selected_text(&self.cf.backend)
+            .show_ui(ui, |ui| {
+                for b in &self.cf.installed_backends.clone() {
+                    if ui.selectable_label(self.cf.backend == *b, b).clicked() {
+                        self.cf.backend = b.clone();
+                        self.cf.selected_monitor = "All".to_string();
+                        self.monitor_options = get_monitor_options(&self.cf.backend);
+                    }
+                }
+            });
+    }
+
+    /// Monitor selector — hidden for backends that don't support per-monitor
+    fn show_monitor_selector(&mut self, ui: &mut Ui) {
+        if ["feh", "wallutils", "none"].contains(&self.cf.backend.as_str()) {
+            return;
+        }
+        egui::ComboBox::from_id_salt("monitor")
+            .selected_text(&self.cf.selected_monitor)
+            .show_ui(ui, |ui| {
+                for m in &self.monitor_options.clone() {
+                    if ui
+                        .selectable_label(self.cf.selected_monitor == *m, m)
+                        .clicked()
+                    {
+                        self.cf.selected_monitor = m.clone();
+                    }
+                }
+            });
+    }
+
+    /// Fill mode selector + color picker — hidden for hyprpaper/none
+    fn show_fill_selector(&mut self, ui: &mut Ui) {
+        if ["hyprpaper", "none"].contains(&self.cf.backend.as_str()) {
+            return;
+        }
+        egui::ComboBox::from_id_salt("fill")
+            .selected_text(capitalize(&self.cf.fill_option))
+            .show_ui(ui, |ui| {
+                for f in FILL_OPTIONS {
+                    if ui
+                        .selectable_label(self.cf.fill_option == *f, capitalize(f))
+                        .clicked()
+                    {
+                        self.cf.fill_option = f.to_string();
+                    }
+                }
+            });
+
+        let mut color = hex_to_color32(&self.cf.color);
+        if ui.color_edit_button_srgba(&mut color).changed() {
+            self.cf.color = color32_to_hex(color);
+        }
+    }
+
+    /// Transition options for swww/awww backends
+    fn show_swww_options(&mut self, ui: &mut Ui) {
+        if !["swww", "awww"].contains(&self.cf.backend.as_str()) {
+            return;
+        }
+
+        self.show_swww_transition_combo(ui);
+        self.show_swww_text_fields(ui);
+        self.sync_swww_fields();
+    }
+
+    /// Transition type combo box for swww/awww
+    fn show_swww_transition_combo(&mut self, ui: &mut Ui) {
+        egui::ComboBox::from_id_salt("transition")
+            .selected_text(&self.cf.swww_transition_type)
+            .show_ui(ui, |ui| {
+                for t in SWWW_TRANSITION_TYPES {
+                    if ui
+                        .selectable_label(self.cf.swww_transition_type == *t, *t)
+                        .clicked()
+                    {
+                        self.cf.swww_transition_type = t.to_string();
+                    }
+                }
+            });
+    }
+
+    /// Angle/steps/duration/fps text fields for swww/awww
+    fn show_swww_text_fields(&mut self, ui: &mut Ui) {
+        ui.add(
+            egui::TextEdit::singleline(&mut self.swww_angle_str)
+                .desired_width(40.0)
+                .hint_text("angle"),
+        );
+        ui.add(
+            egui::TextEdit::singleline(&mut self.swww_steps_str)
+                .desired_width(40.0)
+                .hint_text("steps"),
+        );
+        ui.add(
+            egui::TextEdit::singleline(&mut self.swww_duration_str)
+                .desired_width(55.0)
+                .hint_text("duration"),
+        );
+        ui.add(
+            egui::TextEdit::singleline(&mut self.swww_fps_str)
+                .desired_width(40.0)
+                .hint_text("fps"),
+        );
+    }
+
+    /// Parse swww text fields into config values
+    fn sync_swww_fields(&mut self) {
+        if let Ok(v) = self.swww_angle_str.parse::<u32>() {
+            self.cf.swww_transition_angle = v;
+        }
+        if let Ok(v) = self.swww_steps_str.parse::<u32>() {
+            self.cf.swww_transition_step = v;
+        }
+        if let Ok(v) = self.swww_duration_str.parse::<f32>() {
+            self.cf.swww_transition_duration = v;
+        }
+        if let Ok(v) = self.swww_fps_str.parse::<u32>() {
+            self.cf.swww_transition_fps = v;
+        }
+    }
+
+    /// Mpvpaper pause/stop/sound controls
+    fn show_mpvpaper_controls(&mut self, ui: &mut Ui) {
+        if self.cf.backend != "mpvpaper" {
+            return;
+        }
+
+        if ui.button("⏸ Pause").clicked() {
+            self.mpvpaper_send_command("cycle pause");
+        }
+        if ui.button("⏹ Stop").clicked() {
+            let _ = std::process::Command::new("killall")
+                .arg("mpvpaper")
+                .spawn();
+        }
+        if ui
+            .checkbox(&mut self.cf.mpvpaper_sound, "Sound")
+            .changed()
+        {
+            self.mpvpaper_send_command("cycle mute");
+        }
+    }
+
+    /// Send a command to mpvpaper via its IPC socket
+    fn mpvpaper_send_command(&self, command: &str) {
+        let monitor = &self.cf.selected_monitor;
+        let cmd = format!("echo '{command}' | socat - /tmp/mpv-socket-{monitor}");
+        let _ = std::process::Command::new("sh")
+            .args(["-c", &cmd])
+            .spawn();
+    }
+
+    /// Column count drag control
+    fn show_columns_control(&mut self, ui: &mut Ui) {
+        ui.separator();
+        ui.label("Cols:");
+        let mut cols = self.cf.number_of_columns as i32;
+        if ui
+            .add(egui::DragValue::new(&mut cols).range(1..=10))
+            .changed()
+        {
+            self.cf.number_of_columns = cols as usize;
+        }
     }
 
     pub(crate) fn show_image_grid(
