@@ -74,13 +74,13 @@ impl WaypaperApp {
 
 impl eframe::App for WaypaperApp {
     fn update(&mut self, ctx: &Context, _frame: &mut eframe::Frame) {
-        let is_loading = self.load_state.lock().unwrap().loading;
+        let is_loading = self.load_state.lock().unwrap_or_else(|e| e.into_inner()).loading;
         if is_loading {
             ctx.request_repaint();
         }
 
         let (image_paths, image_names, loading) = {
-            let s = self.load_state.lock().unwrap();
+            let s = self.load_state.lock().unwrap_or_else(|e| e.into_inner());
             (s.image_paths.clone(), s.image_names.clone(), s.loading)
         };
 
