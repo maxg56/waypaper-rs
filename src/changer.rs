@@ -9,11 +9,18 @@ use crate::config::Config;
 
 /// Find the PID of a running process matching the given command string
 fn find_pid(pattern: &str) -> Option<u32> {
-    let output = Command::new("ps").args(["aux"]).output().ok()?;
+    let output = Command::new("ps")
+        .args(["aux"])
+        .output()
+        .map_err(|e| eprintln!("Failed to execute 'ps aux': {e}"))
+        .ok()?;
     let text = String::from_utf8_lossy(&output.stdout);
     for line in text.lines() {
         if line.contains(pattern) {
-            let pid: u32 = line.split_whitespace().nth(1)?.parse().ok()?;
+            let pid_str = line.split_whitespace().nth(1)?;
+            let pid: u32 = pid_str.parse().map_err(|e| {
+                eprintln!("Failed to parse PID '{pid_str}' for pattern '{pattern}': {e}")
+            }).ok()?;
             return Some(pid);
         }
     }

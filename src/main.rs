@@ -193,7 +193,10 @@ fn resolve_random_wallpaper(cf: &mut Config, index: usize) -> Option<PathBuf> {
         cf.include_all_subfolders,
         &cf.cache_dir,
         cf.show_hidden,
-    )?;
+    ).or_else(|| {
+        eprintln!("No random wallpaper found in configured folders for monitor index {index}");
+        None
+    })?;
     if index < cf.wallpapers.len() {
         cf.wallpapers[index] = p.clone();
     } else {
