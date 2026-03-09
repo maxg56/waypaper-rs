@@ -37,6 +37,10 @@ pub struct Config {
     pub mpvpaper_sound: bool,
     pub mpvpaper_options: String,
 
+    // Carousel (slideshow) mode
+    pub carousel_interval: u64,
+    pub carousel_random: bool,
+
     // Display toggles
     pub include_subfolders: bool,
     pub include_all_subfolders: bool,
@@ -108,6 +112,8 @@ impl Config {
             swww_transition_fps: 60,
             mpvpaper_sound: false,
             mpvpaper_options: String::new(),
+            carousel_interval: 60,
+            carousel_random: false,
             include_subfolders: false,
             include_all_subfolders: false,
             show_hidden: false,
@@ -159,6 +165,7 @@ impl Config {
         if let Some(v) = get("swww_transition_duration") { self.swww_transition_duration = v.parse().unwrap_or(2.0); }
         if let Some(v) = get("swww_transition_fps") { self.swww_transition_fps = v.parse().unwrap_or(60); }
         if let Some(v) = get("number_of_columns") { self.number_of_columns = v.parse().unwrap_or(3).max(1); }
+        if let Some(v) = get("carousel_interval") { self.carousel_interval = v.parse().unwrap_or(60).max(1); }
     }
 
     /// Parse boolean config values (stored as "true"/"false" strings)
@@ -173,6 +180,7 @@ impl Config {
         if let Some(v) = get("zen_mode") { self.zen_mode = parse_bool(&v); }
         if let Some(v) = get("use_xdg_state") { self.use_xdg_state = parse_bool(&v); }
         if let Some(v) = get("show_path_in_tooltip") { self.show_path_in_tooltip = parse_bool(&v); }
+        if let Some(v) = get("carousel_random") { self.carousel_random = parse_bool(&v); }
     }
 
     /// Parse multi-line list fields (folders, monitors, wallpapers)
@@ -217,6 +225,8 @@ impl Config {
         set(&mut ini, "zen_mode", &self.zen_mode.to_string());
         set(&mut ini, "use_xdg_state", &self.use_xdg_state.to_string());
         set(&mut ini, "show_path_in_tooltip", &self.show_path_in_tooltip.to_string());
+        set(&mut ini, "carousel_interval", &self.carousel_interval.to_string());
+        set(&mut ini, "carousel_random", &self.carousel_random.to_string());
 
         // Folder list (multi-line)
         let folder_str = self
