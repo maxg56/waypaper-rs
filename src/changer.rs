@@ -1,11 +1,20 @@
 /// Wallpaper backend implementations - calls external programs to set wallpaper
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::thread;
 use std::time::Duration;
 
 use crate::config::Config;
+
+/// Spawn the wallpaper change on a background thread and wait briefly
+pub fn spawn_wallpaper_change(wallpaper: &PathBuf, cf: &Config, monitor: &str) {
+    let cf_clone = cf.clone();
+    let wp_clone = wallpaper.clone();
+    let monitor_clone = monitor.to_string();
+    thread::spawn(move || change_wallpaper(&wp_clone, &cf_clone, &monitor_clone));
+    thread::sleep(Duration::from_millis(100));
+}
 
 /// Find the PID of a running process matching the given command string
 fn find_pid(pattern: &str) -> Option<u32> {

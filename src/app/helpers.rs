@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-pub(super) fn capitalize(s: &str) -> String {
+pub(crate) fn capitalize(s: &str) -> String {
     let mut c = s.chars();
     match c.next() {
         None => String::new(),
@@ -8,7 +8,7 @@ pub(super) fn capitalize(s: &str) -> String {
     }
 }
 
-pub(super) fn hex_to_color32(hex: &str) -> egui::Color32 {
+pub(crate) fn hex_to_color32(hex: &str) -> egui::Color32 {
     let hex = hex.trim_start_matches('#');
     if hex.len() == 6 {
         let r = u8::from_str_radix(&hex[0..2], 16).unwrap_or(255);
@@ -20,11 +20,11 @@ pub(super) fn hex_to_color32(hex: &str) -> egui::Color32 {
     }
 }
 
-pub(super) fn color32_to_hex(c: egui::Color32) -> String {
+pub(crate) fn color32_to_hex(c: egui::Color32) -> String {
     format!("#{:02X}{:02X}{:02X}", c.r(), c.g(), c.b())
 }
 
 /// Native folder picker using rfd
-pub(super) fn rfd_pick_folder() -> Option<PathBuf> {
+pub(crate) fn rfd_pick_folder() -> Option<PathBuf> {
     rfd::FileDialog::new().pick_folder()
 }
